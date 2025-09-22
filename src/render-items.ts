@@ -1,4 +1,4 @@
-import { mkdir, writeFile, access } from 'node:fs/promises'
+import { mkdir, writeFile, access, readdir, copyFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import createGL from 'gl'
@@ -18,6 +18,7 @@ import {
 	type TextureAtlasProvider,
 	type UV,
 } from 'deepslate/render'
+import { getHardcodedTwoDItemIds } from './twoD-overrides.js'
 
 const VERSION_REF = process.env.VOXEL_MC_VERSION ?? 'latest'
 const VERSION_ID = VERSION_REF
@@ -46,10 +47,12 @@ async function main() {
 
 	const availableIds = await fetchItemRegistryList()
 
-	const [itemComponentsJson, resourcesData] = await Promise.all([
+	const [itemComponentsJson, resourcesData, detectedTwoDItemIds] = await Promise.all([
 		fetchItemComponents(),
 		fetchResources(),
+		fetchTwoDItemIds(),
 	])
+	const twoDItemIds = new Set<string>([...detectedTwoDItemIds, ...getHardcodedTwoDItemIds()])
 	const itemComponentsNbt = convertItemComponents(itemComponentsJson)
 	const resources = new ResourceManager(
 		VERSION_ID,
@@ -78,13 +81,16 @@ async function main() {
 				continue
 			} catch { }
 			const item = new ItemStack(identifier, 1)
-			const png = await renderItemToPng(item, resources)
+			const size = twoDItemIds.has(id) ? 16 : RENDER_SIZE
+			const png = await renderItemToPng(item, resources, size)
 			await writeFile(outPath, png)
-			console.log(`${COLOR.green}Rendered ${id}${COLOR.reset} -> ${path.relative(process.cwd(), outPath)}`)
+			console.log(`${COLOR.green}Rendered ${id}${COLOR.reset} (${size}x${size}) -> ${path.relative(process.cwd(), outPath)}`)
 		} catch (e) {
 			console.warn(`Failed to render ${id}:`, e)
 		}
 	}
+
+	await mergeHardcodedIcons(path.resolve(dirname, '..', 'hardcoded'), outputDir)
 }
 
 main().catch(err => {
@@ -146,6 +152,18 @@ function atlasUrl(pathname: string) {
 
 async function fetchItemRegistryList(): Promise<string[]> {
 	return fetchJson<string[]>(`${MC_META_BASE}/registries/item/data.json`)
+}
+
+async function fetchTwoDItemIds(): Promise<Set<string>> {
+	const textures = await fetchJson<string[]>(`${MC_META_BASE}/registries/texture/data.json`)
+	const twoD = new Set<string>()
+	for (const tex of textures) {
+		if (tex.startsWith('item/')) {
+			const id = tex.slice('item/'.length)
+			if (id) twoD.add(id)
+		}
+	}
+	return twoD
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -285,24 +303,24 @@ function isRecord(value: unknown): value is Record<string, any> {
 	return typeof value === 'object' && value !== null
 }
 
-async function renderItemToPng(item: ItemStack, resources: ResourceManager) {
-	const gl = createGL(RENDER_SIZE, RENDER_SIZE, { preserveDrawingBuffer: true }) as any;
-	gl.canvas = { width: RENDER_SIZE, height: RENDER_SIZE, clientWidth: RENDER_SIZE, clientHeight: RENDER_SIZE }
+async function renderItemToPng(item: ItemStack, resources: ResourceManager, size: number) {
+	const gl = createGL(size, size, { preserveDrawingBuffer: true }) as any;
+	gl.canvas = { width: size, height: size, clientWidth: size, clientHeight: size }
 
 	const renderer = new ItemRenderer(gl, item, resources, { display_context: 'gui' })
-	renderer.setViewport(0, 0, RENDER_SIZE, RENDER_SIZE)
+	renderer.setViewport(0, 0, size, size)
 	gl.clearColor(0, 0, 0, 0)
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 	renderer.drawItem()
 
-	const pixels = new Uint8Array(RENDER_SIZE * RENDER_SIZE * 4)
-	gl.readPixels(0, 0, RENDER_SIZE, RENDER_SIZE, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
+	const pixels = new Uint8Array(size * size * 4)
+	gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, pixels)
 	gl.destroy?.()
 
-	const flipped = flipYAxis(pixels, RENDER_SIZE, RENDER_SIZE)
-	const canvas = createCanvas(RENDER_SIZE, RENDER_SIZE)
+	const flipped = flipYAxis(pixels, size, size)
+	const canvas = createCanvas(size, size)
 	const ctx = canvas.getContext('2d')
-	const imageData = ctx.createImageData(RENDER_SIZE, RENDER_SIZE)
+	const imageData = ctx.createImageData(size, size)
 	imageData.data.set(flipped)
 	ctx.putImageData(imageData, 0, 0)
 	return canvas.toBuffer('image/png')
@@ -336,6 +354,22 @@ function jsonToNbt(value: unknown): NbtTag {
 		return new NbtCompound(new Map(Object.entries(value).map(([k, v]) => [k, jsonToNbt(v)])))
 	}
 	return new NbtByte(0)
+}
+
+async function mergeHardcodedIcons(sourceDir: string, outputDir: string) {
+	try {
+		const entries = await readdir(sourceDir, { withFileTypes: true })
+		for (const entry of entries) {
+			if (entry.isFile() && entry.name.toLowerCase().endsWith('.png')) {
+				const src = path.join(sourceDir, entry.name)
+				const dest = path.join(outputDir, entry.name)
+				await copyFile(src, dest)
+				console.log(`${COLOR.green}Hardcoded${COLOR.reset} -> ${path.relative(process.cwd(), dest)}`)
+			}
+		}
+	} catch {
+		// no hardcoded directory, skip
+	}
 }
 
 

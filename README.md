@@ -28,3 +28,8 @@ npm run render
 
 ### License
 ISC
+
+Note:
+- Copper Golem Status" Special Model isn't supported. So it will be added with "hardcoded" folder.
+- Player Head Special Model isn't supported. So it will be added with "hardcoded" folder.
+- Air Is excluded from the output.

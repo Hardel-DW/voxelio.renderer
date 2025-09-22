@@ -1,23 +1,23 @@
 {
-  "name": "renderer",
-  "version": "1.0.0",
-  "description": "",
-  "type": "module",
-  "scripts": {
-    "render": "tsx src/render-items.ts"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "dependencies": {
-    "@napi-rs/canvas": "^0.1.80",
-    "deepslate": "^0.23.6",
-    "gl": "^8.1.6"
-  },
-  "devDependencies": {
-    "@types/gl": "^6.0.5",
-    "@types/node": "^24.5.2",
-    "tsx": "^4.20.5",
-    "typescript": "^5.9.2"
-  }
+    "name": "renderer",
+    "version": "1.0.0",
+    "description": "",
+    "type": "module",
+    "scripts": {
+        "render": "tsx src/render-items.ts"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@napi-rs/canvas": "^0.1.80",
+        "deepslate": "^0.23.6",
+        "gl": "^8.1.6"
+    },
+    "devDependencies": {
+        "@types/gl": "^6.0.5",
+        "@types/node": "^24.5.2",
+        "tsx": "^4.20.5",
+        "typescript": "^5.9.2"
+    }
 }
